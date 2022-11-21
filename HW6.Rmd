@@ -1,0 +1,85 @@
+---
+title: "HW6"
+output: html_document
+date: "2022-11-21"
+---
+```{r include=FALSE}
+library(tidyverse)
+library(ggplot2)
+set.seed(1)
+```
+
+# problem 1
+```{r echo=FALSE}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+
+## r²
+```{r}
+result <- weather_df %>% 
+  modelr::bootstrap(n=5000) %>%
+  mutate(
+    models = map(strap, ~lm(tmax ~ tmin, data = .x) ),
+    r_results = map(models, broom::glance),
+    beta_results = map(models, broom::tidy))
+```
+
+
+## plot of r²
+```{r}
+result %>%
+  select(r_results) %>% 
+  unnest()%>%
+  ggplot(aes(x=r.squared)) + geom_density()
+```
+```{r}
+result %>%
+  select(r_results) %>% 
+  unnest()%>%
+  summarize(
+    mean = mean(r.squared),
+    se = sd(r.squared),
+    "2.5-quantile" = mean(r.squared)+qnorm(0.025)*sd(r.squared),
+    "97.5-quantile" = mean(r.squared)+qnorm(0.775)*sd(r.squared)
+  )
+```
+R square is likely to be symmetrically distributed with mean 0.91, the 2.5 quantile and 97.5 quantile is 0.894 and 0.918
+
+```{r}
+beta_df <- result %>% 
+  select(beta_results) %>% 
+  unnest(beta_results) %>% 
+  select(term, estimate) %>% 
+  pivot_wider(
+    names_from = term,
+    values_from = estimate
+  ) %>% 
+  janitor::clean_names() %>% 
+  unnest() %>% 
+  mutate(log_value = log(intercept*tmin)) 
+
+beta_df %>%
+   ggplot(aes(x = log_value)) + geom_density()
+```
+```{r}
+beta_df %>% 
+  summarize(
+    mean= mean(log_value),
+    se = sd(log_value),
+    "2.5-quantile" = mean(log_value)+qnorm(0.025)*sd(log_value),
+    "97.5-quantile" = mean(log_value)+qnorm(0.775)*sd(log_value)
+  )
+```
+log(β1*β2)  is likely to be symmetrically distributed with mean 2.01 . The 2.5% quantile and 97.5% quantile are 1.966 and 2.031.
+
