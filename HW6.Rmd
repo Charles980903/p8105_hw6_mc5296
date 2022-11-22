@@ -1,6 +1,6 @@
 ---
 title: "HW6"
-output: html_document
+output: github_document
 date: "2022-11-21"
 ---
 ```{r include=FALSE}
@@ -82,4 +82,89 @@ beta_df %>%
   )
 ```
 log(β1*β2)  is likely to be symmetrically distributed with mean 2.01 . The 2.5% quantile and 97.5% quantile are 1.966 and 2.031.
+
+# Problem 2
+
+## Import data and tidy data
+```{r warning=FALSE}
+url <- 'https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv'
+homicides_df <- read_csv(url(url), na = c(" ", "Unknown"))
+
+homicides_df <- homicides_df %>% 
+  mutate(city_state = str_c(city, state, sep = ", "),
+         whether_solved = ifelse(
+           disposition %in% c("Closed without arrest", "Open/No arrest"), 0, 1)) %>%
+  filter(!city_state %in% c("Dallas, TX", "Phoenix, AZ","Kansas City, MO", "Tulsa, AL")) %>%
+  filter(victim_race %in% c("White", "Black"))%>%
+  filter(!victim_age == "Unknown") %>%
+  mutate(victim_age = as.numeric(victim_age),
+         victim_race = as.factor(victim_race),
+         victim_sex = as.factor(victim_sex))
+head(homicides_df)
+```
+Fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors for Baltimore, MD.
+```{r}
+logi_baltimore= 
+  homicides_df %>% 
+  filter(city_state=="Baltimore, MD") %>% 
+  glm(whether_solved ~ victim_age+victim_race+victim_sex, data=., family= binomial())
+
+logi_baltimore %>%
+  broom::tidy() %>%
+   mutate(
+    estimate = exp(estimate),
+    lower = exp(confint(logi_baltimore)[,1]),
+    upper = exp(confint(logi_baltimore)[,2])
+   ) %>%
+    filter(term == "victim_sexMale") %>%
+  select(estimate, lower, upper)
+```
+Thus, we come to conclude that, male has 0.426 times higher odds chance of getting a resolved case compare to female.
+
+Now, Run for all other cities
+```{r message=FALSE}
+# Create a function
+city_odds <- function(df){
+  
+logi_cities <- glm(whether_solved ~ victim_age+victim_race+victim_sex,data = df , family= binomial())
+
+logi_cities %>%
+  broom::tidy() %>%
+   mutate(
+    estimate = exp(estimate),
+    lower = exp(confint(logi_cities)[,1]),
+    upper = exp(confint(logi_cities)[,2])
+   ) %>%
+    filter(term == "victim_sexMale") %>%
+  select(estimate, lower, upper)
+  
+}
+
+# apply function to cities
+result_df = 
+  homicides_df %>% 
+  select(city_state, victim_age, victim_race, victim_sex, whether_solved)%>%
+  nest(df = victim_age:whether_solved) %>%
+   mutate(
+    model = map(df, city_odds)
+  ) %>%
+  select(city_state, model)%>%
+  unnest(model)
+result_df
+```
+
+## Create plot
+```{r}
+ggplot(result_df, aes(x=fct_reorder(city_state, estimate), y=estimate))+
+  geom_point()+
+  geom_errorbar(aes(ymin=lower, ymax=upper))+
+  labs(title = "Odds ratio of resolved homicide cases of male against female ", 
+       x = "city",
+       y = "odds ratio") +
+  theme(axis.text.x = element_text(angle = 75, hjust = 1))
+```
+   
+
+
+
 
