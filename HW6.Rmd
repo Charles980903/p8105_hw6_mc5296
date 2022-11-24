@@ -3,10 +3,10 @@ title: "HW6"
 output: github_document
 date: "2022-11-21"
 ---
-```{r include=FALSE}
-library(tidyverse)
-library(ggplot2)
-set.seed(1)
+```{r}
+ library(tidyverse)
+ library(modelr)
+ library(dbplyr)
 ```
 
 # problem 1
@@ -119,7 +119,7 @@ logi_baltimore %>%
     filter(term == "victim_sexMale") %>%
   select(estimate, lower, upper)
 ```
-Thus, we come to conclude that, male has 0.426 times higher odds chance of getting a resolved case compare to female.
+Thus, we come to conclude that, male has 0.426 times the odds of getting a resolved case compare to female.
 
 Now, Run for all other cities
 ```{r message=FALSE}
@@ -164,7 +164,83 @@ ggplot(result_df, aes(x=fct_reorder(city_state, estimate), y=estimate))+
   theme(axis.text.x = element_text(angle = 75, hjust = 1))
 ```
    
+The estimate of odds ratio of most cities are less than one, which means in these cities, male victims have a less chance of having a resolved case than female. In some cities like New York, Baton Rouge, Omaha and Chicago, etc. Even the upper limit of CI is less than one. Therefore in these cities, sex is strong related to whether the case was resolved. But in cities like Fresno, Stockton and Albuquerque, the CI is very wider, which indicates that sex is less likely to be related to the disposition of the case.
 
+# Problem3
+```{r}
+#import data
+bw_df <- read.csv("data/birthweight.csv")
+#tidy data
+bw_df <- bw_df %>% 
+  mutate(
+         babysex = factor(babysex,levels = c(1, 2),labels = c("Male", "Female")),
+         frace = factor(frace, levels = c(1, 2, 3, 4, 8, 9),labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown")), 
+         malform = factor(malform,levels = c(0, 1),labels = c("Absent", "Present")),
+         mrace = factor(mrace,levels = c(1, 2, 3, 4, 8),labels = c("White", "Black", "Asian", "Puerto Rican", "Other"))
+        )%>%
+  filter(!frace == "Unknown")%>%
+  na.omit()
+bw_df
+```
 
+I assume that all factors contribute to birthweight at first, than we can use backward stepwise to select the best model
 
+```{r}
+# Fit the full model 
+full.model <- lm(bwt ~., data = bw_df)
+# Stepwise regression model
+step.model <- MASS::stepAIC(full.model, direction = "backward", 
+                      trace = FALSE)
+summary(step.model)
+```
+
+We use the stepwise model and plot residuals against fitted values
+```{r}
+bw_df %>% 
+  add_residuals(step.model) %>% 
+  add_predictions(step.model) %>% 
+  ggplot(aes( x = pred, y = resid)) +
+  geom_point(alpha = 0.3)+
+  xlab("fitted values") +
+  ylab("residual")
+```
+From the plot, we see that residuals centered around 0 and most of the predicted weight is around 3200. But when fitted values are small, the residuals are high.
+
+## Compare the models
+```{r}
+# cross validation
+cv_df <- 
+  crossv_mc(bw_df, 100) %>%  
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+
+cv_df <- 
+  cv_df %>% 
+  mutate(
+    model1 = map( train, ~lm(bwt ~ blength + gaweeks, data = bw_df)),
+    model2 =  map( train, ~lm(bwt ~ bhead + blength + babysex + bhead*blength + blength*babysex + bhead*babysex + bhead*blength*babysex, data = bw_df)),
+    bestmodel = map( train, ~lm( bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = bw_df))) %>%
+   mutate(
+    rmse_model1 = map2_dbl( model1,  test, ~rmse(model = .x, data =.y)),
+    rmse_model2 = map2_dbl( model2,  test, ~rmse(model = .x, data =.y)),
+    rmse_bestmodel = map2_dbl( bestmodel, test, ~rmse(model = .x, data =.y))
+  ) 
+cv_df
+  
+```
+
+Let's make a plot to show the distribution of RMSE
+```{r}
+cv_df %>%
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
 
