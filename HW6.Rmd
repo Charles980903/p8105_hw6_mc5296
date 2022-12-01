@@ -3,7 +3,7 @@ title: "HW6"
 output: github_document
 date: "2022-11-21"
 ---
-```{r}
+```{r include=FALSE}
  library(tidyverse)
  library(modelr)
  library(dbplyr)
@@ -150,7 +150,7 @@ result_df =
   ) %>%
   select(city_state, model)%>%
   unnest(model)
-result_df
+head(result_df)
 ```
 
 ## Create plot
@@ -180,7 +180,7 @@ bw_df <- bw_df %>%
         )%>%
   filter(!frace == "Unknown")%>%
   na.omit()
-bw_df
+head(bw_df)
 ```
 
 I assume that all factors contribute to birthweight at first, than we can use backward stepwise to select the best model
@@ -221,11 +221,11 @@ cv_df <-
   mutate(
     model1 = map( train, ~lm(bwt ~ blength + gaweeks, data = bw_df)),
     model2 =  map( train, ~lm(bwt ~ bhead + blength + babysex + bhead*blength + blength*babysex + bhead*babysex + bhead*blength*babysex, data = bw_df)),
-    bestmodel = map( train, ~lm( bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = bw_df))) %>%
+    mymodel = map( train, ~lm( bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = bw_df))) %>%
    mutate(
     rmse_model1 = map2_dbl( model1,  test, ~rmse(model = .x, data =.y)),
     rmse_model2 = map2_dbl( model2,  test, ~rmse(model = .x, data =.y)),
-    rmse_bestmodel = map2_dbl( bestmodel, test, ~rmse(model = .x, data =.y))
+    rmse_mymodel = map2_dbl( mymodel, test, ~rmse(model = .x, data =.y))
   ) 
 cv_df
   
@@ -243,4 +243,4 @@ cv_df %>%
   mutate(model = fct_inorder(model)) %>% 
   ggplot(aes(x = model, y = rmse)) + geom_violin()
 ```
-
+From the plot, we see that our stepwise model has the lowest RMSE. The adjusted R-squared is 0.7173, which indicates the model fits well. Therefore I choose to select stepwise model as the best model.
