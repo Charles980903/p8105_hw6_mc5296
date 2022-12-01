@@ -57,7 +57,7 @@ result %>%
     ## # A tibble: 1 × 4
     ##    mean      se `2.5-quantile` `97.5-quantile`
     ##   <dbl>   <dbl>          <dbl>           <dbl>
-    ## 1 0.911 0.00870          0.894           0.918
+    ## 1 0.911 0.00856          0.895           0.918
 
 R square is likely to be symmetrically distributed with mean 0.91, the
 2.5 quantile and 97.5 quantile is 0.894 and 0.918
@@ -108,7 +108,7 @@ beta_df %>%
     ## # A tibble: 1 × 4
     ##    mean     se `2.5-quantile` `97.5-quantile`
     ##   <dbl>  <dbl>          <dbl>           <dbl>
-    ## 1  2.01 0.0240           1.97            2.03
+    ## 1  2.01 0.0236           1.97            2.03
 
 log(β1\*β2) is likely to be symmetrically distributed with mean 2.01 .
 The 2.5% quantile and 97.5% quantile are 1.966 and 2.031.
@@ -297,47 +297,38 @@ full.model <- lm(bwt ~., data = bw_df)
 # Stepwise regression model
 step.model <- MASS::stepAIC(full.model, direction = "backward", 
                       trace = FALSE)
-summary(step.model)
+summary(step.model) %>%
+  broom::tidy() %>%
+  knitr::kable()
 ```
 
-    ## 
-    ## Call:
-    ## lm(formula = bwt ~ babysex + bhead + blength + delwt + fincome + 
-    ##     gaweeks + mheight + mrace + parity + ppwt + smoken, data = bw_df)
-    ## 
-    ## Residuals:
-    ##      Min       1Q   Median       3Q      Max 
-    ## -1097.18  -185.52    -3.39   174.14  2353.44 
-    ## 
-    ## Coefficients:
-    ##                     Estimate Std. Error t value Pr(>|t|)    
-    ## (Intercept)       -6098.8219   137.5463 -44.340  < 2e-16 ***
-    ## babysexFemale        28.5580     8.4549   3.378 0.000737 ***
-    ## bhead               130.7770     3.4466  37.944  < 2e-16 ***
-    ## blength              74.9471     2.0190  37.120  < 2e-16 ***
-    ## delwt                 4.1067     0.3921  10.475  < 2e-16 ***
-    ## fincome               0.3180     0.1747   1.820 0.068844 .  
-    ## gaweeks              11.5925     1.4621   7.929 2.79e-15 ***
-    ## mheight               6.5940     1.7849   3.694 0.000223 ***
-    ## mraceBlack         -138.7925     9.9071 -14.009  < 2e-16 ***
-    ## mraceAsian          -74.8868    42.3146  -1.770 0.076837 .  
-    ## mracePuerto Rican  -100.6781    19.3247  -5.210 1.98e-07 ***
-    ## parity               96.3047    40.3362   2.388 0.017004 *  
-    ## ppwt                 -2.6756     0.4274  -6.261 4.20e-10 ***
-    ## smoken               -4.8434     0.5856  -8.271  < 2e-16 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## Residual standard error: 272.3 on 4328 degrees of freedom
-    ## Multiple R-squared:  0.7181, Adjusted R-squared:  0.7173 
-    ## F-statistic: 848.1 on 13 and 4328 DF,  p-value: < 2.2e-16
+| term              |      estimate |   std.error |  statistic |   p.value |
+|:------------------|--------------:|------------:|-----------:|----------:|
+| (Intercept)       | -6098.8219113 | 137.5463421 | -44.340124 | 0.0000000 |
+| babysexFemale     |    28.5580171 |   8.4548958 |   3.377690 | 0.0007374 |
+| bhead             |   130.7770408 |   3.4465672 |  37.944144 | 0.0000000 |
+| blength           |    74.9471109 |   2.0190479 |  37.120027 | 0.0000000 |
+| delwt             |     4.1067316 |   0.3920592 |  10.474775 | 0.0000000 |
+| fincome           |     0.3180229 |   0.1747477 |   1.819898 | 0.0688436 |
+| gaweeks           |    11.5924873 |   1.4620657 |   7.928842 | 0.0000000 |
+| mheight           |     6.5940377 |   1.7848817 |   3.694383 | 0.0002231 |
+| mraceBlack        |  -138.7924801 |   9.9070869 | -14.009414 | 0.0000000 |
+| mraceAsian        |   -74.8867755 |  42.3146313 |  -1.769761 | 0.0768374 |
+| mracePuerto Rican |  -100.6781427 |  19.3246910 |  -5.209819 | 0.0000002 |
+| parity            |    96.3046933 |  40.3362158 |   2.387549 | 0.0170038 |
+| ppwt              |    -2.6755853 |   0.4273585 |  -6.260752 | 0.0000000 |
+| smoken            |    -4.8434197 |   0.5855757 |  -8.271210 | 0.0000000 |
 
-We use the stepwise model and plot residuals against fitted values
+In stepwise model, I noticed that the fincome is not significant, so I
+decided not to include it in my model.
+
+I use my model and plot residuals against fitted values
 
 ``` r
+my_model = lm( bwt ~ babysex + bhead + blength + delwt + gaweeks + mheight + mrace + parity + ppwt + smoken, data = bw_df)
 bw_df %>% 
-  add_residuals(step.model) %>% 
-  add_predictions(step.model) %>% 
+  add_residuals(my_model) %>% 
+  add_predictions(my_model) %>% 
   ggplot(aes( x = pred, y = resid)) +
   geom_point(alpha = 0.3)+
   xlab("fitted values") +
@@ -366,7 +357,7 @@ cv_df <-
   mutate(
     model1 = map( train, ~lm(bwt ~ blength + gaweeks, data = bw_df)),
     model2 =  map( train, ~lm(bwt ~ bhead + blength + babysex + bhead*blength + blength*babysex + bhead*babysex + bhead*blength*babysex, data = bw_df)),
-    mymodel = map( train, ~lm( bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = bw_df))) %>%
+    mymodel = map( train, ~lm( bwt ~ babysex + bhead + blength + delwt + gaweeks + mheight + mrace + parity + ppwt + smoken, data = bw_df))) %>%
    mutate(
     rmse_model1 = map2_dbl( model1,  test, ~rmse(model = .x, data =.y)),
     rmse_model2 = map2_dbl( model2,  test, ~rmse(model = .x, data =.y)),
@@ -378,16 +369,16 @@ cv_df
     ## # A tibble: 100 × 9
     ##    train    test     .id   model1 model2 mymodel rmse_model1 rmse_model2 rmse_…¹
     ##    <list>   <list>   <chr> <list> <list> <list>        <dbl>       <dbl>   <dbl>
-    ##  1 <tibble> <tibble> 001   <lm>   <lm>   <lm>           340.        288.    273.
-    ##  2 <tibble> <tibble> 002   <lm>   <lm>   <lm>           332.        300.    285.
-    ##  3 <tibble> <tibble> 003   <lm>   <lm>   <lm>           330.        291.    273.
-    ##  4 <tibble> <tibble> 004   <lm>   <lm>   <lm>           322.        278.    263.
-    ##  5 <tibble> <tibble> 005   <lm>   <lm>   <lm>           357.        298.    290.
-    ##  6 <tibble> <tibble> 006   <lm>   <lm>   <lm>           337.        293.    277.
-    ##  7 <tibble> <tibble> 007   <lm>   <lm>   <lm>           357.        290.    272.
-    ##  8 <tibble> <tibble> 008   <lm>   <lm>   <lm>           369.        316.    297.
-    ##  9 <tibble> <tibble> 009   <lm>   <lm>   <lm>           350.        294.    278.
-    ## 10 <tibble> <tibble> 010   <lm>   <lm>   <lm>           328.        284.    270.
+    ##  1 <tibble> <tibble> 001   <lm>   <lm>   <lm>           330.        283.    264.
+    ##  2 <tibble> <tibble> 002   <lm>   <lm>   <lm>           343.        288.    272.
+    ##  3 <tibble> <tibble> 003   <lm>   <lm>   <lm>           339.        297.    280.
+    ##  4 <tibble> <tibble> 004   <lm>   <lm>   <lm>           339.        298.    286.
+    ##  5 <tibble> <tibble> 005   <lm>   <lm>   <lm>           330.        286.    268.
+    ##  6 <tibble> <tibble> 006   <lm>   <lm>   <lm>           324.        277.    262.
+    ##  7 <tibble> <tibble> 007   <lm>   <lm>   <lm>           326.        283.    267.
+    ##  8 <tibble> <tibble> 008   <lm>   <lm>   <lm>           341.        293.    274.
+    ##  9 <tibble> <tibble> 009   <lm>   <lm>   <lm>           374.        304.    288.
+    ## 10 <tibble> <tibble> 010   <lm>   <lm>   <lm>           332.        277.    261.
     ## # … with 90 more rows, and abbreviated variable name ¹​rmse_mymodel
 
 Let’s make a plot to show the distribution of RMSE

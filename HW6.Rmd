@@ -192,14 +192,19 @@ full.model <- lm(bwt ~., data = bw_df)
 # Stepwise regression model
 step.model <- MASS::stepAIC(full.model, direction = "backward", 
                       trace = FALSE)
-summary(step.model)
+summary(step.model) %>%
+  broom::tidy() %>%
+  knitr::kable()
 ```
 
-We use the stepwise model and plot residuals against fitted values
+In stepwise model, I noticed that the fincome is not significant, so I decided not to include it in my model.
+
+I use my model and plot residuals against fitted values
 ```{r}
+my_model = lm( bwt ~ babysex + bhead + blength + delwt + gaweeks + mheight + mrace + parity + ppwt + smoken, data = bw_df)
 bw_df %>% 
-  add_residuals(step.model) %>% 
-  add_predictions(step.model) %>% 
+  add_residuals(my_model) %>% 
+  add_predictions(my_model) %>% 
   ggplot(aes( x = pred, y = resid)) +
   geom_point(alpha = 0.3)+
   xlab("fitted values") +
@@ -209,6 +214,8 @@ bw_df %>%
 From the plot, we see that residuals centered around 0 and most of the predicted weight is around 3200. But when fitted values are small, the residuals are high.
 
 ## Compare the models
+
+
 ```{r}
 # cross validation
 cv_df <- 
@@ -223,7 +230,7 @@ cv_df <-
   mutate(
     model1 = map( train, ~lm(bwt ~ blength + gaweeks, data = bw_df)),
     model2 =  map( train, ~lm(bwt ~ bhead + blength + babysex + bhead*blength + blength*babysex + bhead*babysex + bhead*blength*babysex, data = bw_df)),
-    mymodel = map( train, ~lm( bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = bw_df))) %>%
+    mymodel = map( train, ~lm( bwt ~ babysex + bhead + blength + delwt + gaweeks + mheight + mrace + parity + ppwt + smoken, data = bw_df))) %>%
    mutate(
     rmse_model1 = map2_dbl( model1,  test, ~rmse(model = .x, data =.y)),
     rmse_model2 = map2_dbl( model2,  test, ~rmse(model = .x, data =.y)),
