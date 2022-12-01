@@ -1,3 +1,253 @@
+<<<<<<< HEAD
+---
+title: "HW6"
+output: github_document
+date: "2022-11-21"
+---
+```{r include=FALSE}
+ library(tidyverse)
+ library(modelr)
+ library(dbplyr)
+```
+
+# problem 1
+```{r echo=FALSE}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+
+## r²
+```{r}
+result <- weather_df %>% 
+  modelr::bootstrap(n=5000) %>%
+  mutate(
+    models = map(strap, ~lm(tmax ~ tmin, data = .x) ),
+    r_results = map(models, broom::glance),
+    beta_results = map(models, broom::tidy))
+```
+
+
+## plot of r²
+```{r}
+result %>%
+  select(r_results) %>% 
+  unnest()%>%
+  ggplot(aes(x=r.squared)) + geom_density()
+```
+```{r}
+result %>%
+  select(r_results) %>% 
+  unnest()%>%
+  summarize(
+    mean = mean(r.squared),
+    se = sd(r.squared),
+    "2.5-quantile" = mean(r.squared)+qnorm(0.025)*sd(r.squared),
+    "97.5-quantile" = mean(r.squared)+qnorm(0.775)*sd(r.squared)
+  )
+```
+R square is likely to be symmetrically distributed with mean 0.91, the 2.5 quantile and 97.5 quantile is 0.894 and 0.918
+
+```{r}
+beta_df <- result %>% 
+  select(beta_results) %>% 
+  unnest(beta_results) %>% 
+  select(term, estimate) %>% 
+  pivot_wider(
+    names_from = term,
+    values_from = estimate
+  ) %>% 
+  janitor::clean_names() %>% 
+  unnest() %>% 
+  mutate(log_value = log(intercept*tmin)) 
+
+beta_df %>%
+   ggplot(aes(x = log_value)) + geom_density()
+```
+```{r}
+beta_df %>% 
+  summarize(
+    mean= mean(log_value),
+    se = sd(log_value),
+    "2.5-quantile" = mean(log_value)+qnorm(0.025)*sd(log_value),
+    "97.5-quantile" = mean(log_value)+qnorm(0.775)*sd(log_value)
+  )
+```
+log(β1*β2)  is likely to be symmetrically distributed with mean 2.01 . The 2.5% quantile and 97.5% quantile are 1.966 and 2.031.
+
+# Problem 2
+
+## Import data and tidy data
+```{r warning=FALSE}
+url <- 'https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv'
+homicides_df <- read_csv(url(url), na = c(" ", "Unknown"))
+
+homicides_df <- homicides_df %>% 
+  mutate(city_state = str_c(city, state, sep = ", "),
+         whether_solved = ifelse(
+           disposition %in% c("Closed without arrest", "Open/No arrest"), 0, 1)) %>%
+  filter(!city_state %in% c("Dallas, TX", "Phoenix, AZ","Kansas City, MO", "Tulsa, AL")) %>%
+  filter(victim_race %in% c("White", "Black"))%>%
+  filter(!victim_age == "Unknown") %>%
+  mutate(victim_age = as.numeric(victim_age),
+         victim_race = as.factor(victim_race),
+         victim_sex = as.factor(victim_sex))
+head(homicides_df)
+```
+Fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors for Baltimore, MD.
+```{r}
+logi_baltimore= 
+  homicides_df %>% 
+  filter(city_state=="Baltimore, MD") %>% 
+  glm(whether_solved ~ victim_age+victim_race+victim_sex, data=., family= binomial())
+
+logi_baltimore %>%
+  broom::tidy() %>%
+   mutate(
+    estimate = exp(estimate),
+    lower = exp(confint(logi_baltimore)[,1]),
+    upper = exp(confint(logi_baltimore)[,2])
+   ) %>%
+    filter(term == "victim_sexMale") %>%
+  select(estimate, lower, upper)
+```
+Thus, we come to conclude that, male has 0.426 times the odds of getting a resolved case compare to female.
+
+Now, Run for all other cities
+```{r message=FALSE}
+# Create a function
+city_odds <- function(df){
+  
+logi_cities <- glm(whether_solved ~ victim_age+victim_race+victim_sex,data = df , family= binomial())
+
+logi_cities %>%
+  broom::tidy() %>%
+   mutate(
+    estimate = exp(estimate),
+    lower = exp(confint(logi_cities)[,1]),
+    upper = exp(confint(logi_cities)[,2])
+   ) %>%
+    filter(term == "victim_sexMale") %>%
+  select(estimate, lower, upper)
+  
+}
+
+# apply function to cities
+result_df = 
+  homicides_df %>% 
+  select(city_state, victim_age, victim_race, victim_sex, whether_solved)%>%
+  nest(df = victim_age:whether_solved) %>%
+   mutate(
+    model = map(df, city_odds)
+  ) %>%
+  select(city_state, model)%>%
+  unnest(model)
+head(result_df)
+```
+
+## Create plot
+```{r}
+ggplot(result_df, aes(x=fct_reorder(city_state, estimate), y=estimate))+
+  geom_point()+
+  geom_errorbar(aes(ymin=lower, ymax=upper))+
+  labs(title = "Odds ratio of resolved homicide cases of male against female ", 
+       x = "city",
+       y = "odds ratio") +
+  theme(axis.text.x = element_text(angle = 75, hjust = 1))
+```
+   
+The estimate of odds ratio of most cities are less than one, which means in these cities, male victims have a less chance of having a resolved case than female. In some cities like New York, Baton Rouge, Omaha and Chicago, etc. Even the upper limit of CI is less than one. Therefore in these cities, sex is strong related to whether the case was resolved. But in cities like Fresno, Stockton and Albuquerque, the CI is very wider, which indicates that sex is less likely to be related to the disposition of the case.
+
+# Problem3
+```{r}
+#import data
+bw_df <- read.csv("data/birthweight.csv")
+#tidy data
+bw_df <- bw_df %>% 
+  mutate(
+         babysex = factor(babysex,levels = c(1, 2),labels = c("Male", "Female")),
+         frace = factor(frace, levels = c(1, 2, 3, 4, 8, 9),labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown")), 
+         malform = factor(malform,levels = c(0, 1),labels = c("Absent", "Present")),
+         mrace = factor(mrace,levels = c(1, 2, 3, 4, 8),labels = c("White", "Black", "Asian", "Puerto Rican", "Other"))
+        )%>%
+  filter(!frace == "Unknown")%>%
+  na.omit()
+head(bw_df)
+```
+
+I assume that all factors contribute to birthweight at first, than we can use backward stepwise to select the best model
+
+```{r}
+# Fit the full model 
+full.model <- lm(bwt ~., data = bw_df)
+# Stepwise regression model
+step.model <- MASS::stepAIC(full.model, direction = "backward", 
+                      trace = FALSE)
+summary(step.model)
+```
+
+We use the stepwise model and plot residuals against fitted values
+```{r}
+bw_df %>% 
+  add_residuals(step.model) %>% 
+  add_predictions(step.model) %>% 
+  ggplot(aes( x = pred, y = resid)) +
+  geom_point(alpha = 0.3)+
+  xlab("fitted values") +
+  ylab("residual")
+```
+
+From the plot, we see that residuals centered around 0 and most of the predicted weight is around 3200. But when fitted values are small, the residuals are high.
+
+## Compare the models
+```{r}
+# cross validation
+cv_df <- 
+  crossv_mc(bw_df, 100) %>%  
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+
+cv_df <- 
+  cv_df %>% 
+  mutate(
+    model1 = map( train, ~lm(bwt ~ blength + gaweeks, data = bw_df)),
+    model2 =  map( train, ~lm(bwt ~ bhead + blength + babysex + bhead*blength + blength*babysex + bhead*babysex + bhead*blength*babysex, data = bw_df)),
+    mymodel = map( train, ~lm( bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = bw_df))) %>%
+   mutate(
+    rmse_model1 = map2_dbl( model1,  test, ~rmse(model = .x, data =.y)),
+    rmse_model2 = map2_dbl( model2,  test, ~rmse(model = .x, data =.y)),
+    rmse_mymodel = map2_dbl( mymodel, test, ~rmse(model = .x, data =.y))
+  ) 
+cv_df
+  
+```
+
+Let's make a plot to show the distribution of RMSE
+```{r}
+cv_df %>%
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+
+From the plot, we see that our stepwise model has the lowest RMSE. The adjusted R-squared is 0.7173, which indicates the model fits well. Therefore I choose to select stepwise model as the best model.
+=======
 ---
 title: "HW6"
 output: github_document
@@ -244,3 +494,4 @@ cv_df %>%
   ggplot(aes(x = model, y = rmse)) + geom_violin()
 ```
 From the plot, we see that our stepwise model has the lowest RMSE. The adjusted R-squared is 0.7173, which indicates the model fits well. Therefore I choose to select stepwise model as the best model.
+>>>>>>> 4f0034bf1100dd473759a15cfd1ef15cc4e2df59
