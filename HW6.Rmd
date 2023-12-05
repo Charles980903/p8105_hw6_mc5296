@@ -8,6 +8,7 @@ date: "2022-11-21"
  library(tidyverse)
  library(modelr)
  library(dbplyr)
+library(MASS)
 ```
 
 # problem 1
